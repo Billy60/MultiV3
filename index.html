@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>DLXR Tracker Multi V2</title>
+  <title>DLXR Tracker Multi V3</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap" rel="stylesheet" />
   <style>
@@ -124,7 +124,7 @@
 <body>
 
   <header>
-    <div class="logo">DL<span>X</span>R MULTI V2</div>
+    <div class="logo">DL<span>X</span>R MULTI V3</div>
     <button id="ble-btn" onclick="connectBLE()">⚡ CONNECTER</button>
   </header>
 
@@ -290,7 +290,7 @@
           return;
         }
 
-        const did = d.did || 'G???';
+        const did = d.did || 'G001';
         const m = getOrCreateModel(did);
 
         m.lat   = parseFloat(d.lat  || 0);
