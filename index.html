@@ -373,6 +373,21 @@
         btn.textContent = '✓ CONNECTÉ';
         btn.classList.add('connected');
         setStatus('BLE CONNECTÉ — EN ÉCOUTE');
+        isReconnecting = false;
+        // Wake Lock — empêche la mise en veille de l'écran si supporté
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+              // Re-acquérir le wake lock si la page redevient visible
+              document.addEventListener('visibilitychange', async () => {
+                if (document.visibilityState === 'visible') {
+                  try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+                }
+              }, { once: true });
+            });
+          }
+        } catch(e) { /* Wake Lock non supporté — pas bloquant */ }
       } catch(e) {
         setStatus('ERREUR BLE: ' + e.message);
       }
@@ -382,12 +397,65 @@
       const btn = document.getElementById('ble-btn');
       btn.textContent = '⚡ CONNECTER';
       btn.classList.remove('connected');
-      setStatus('BLE DÉCONNECTÉ');
+      // Marquer tous les modèles comme "signal perdu"
+      Object.values(models).forEach(m => {
+        if (m.marker) {
+          m.marker.setOpacity(0.35);
+          const row = document.getElementById('row-' + m.did);
+          if (row) row.style.opacity = '0.5';
+        }
+      });
+      setStatus('BLE DÉCONNECTÉ — Reconnexion auto dans 3s...');
+      // Reconnexion automatique
+      if (!isReconnecting) {
+        isReconnecting = true;
+        reconnectTimer = setTimeout(() => autoReconnect(), 3000);
+      }
+    }
+
+    async function autoReconnect() {
+      if (!bleDevice) { isReconnecting = false; return; }
+      try {
+        setStatus('RECONNEXION EN COURS...');
+        const server  = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        bleCharact    = await service.getCharacteristic(CHARACT_UUID);
+        await bleCharact.startNotifications();
+        bleCharact.addEventListener('characteristicvaluechanged', e => {
+          handleData(new TextDecoder().decode(e.target.value));
+        });
+        // Restaurer l'opacité des marqueurs
+        Object.values(models).forEach(m => {
+          if (m.marker) {
+            m.marker.setOpacity(1.0);
+            const row = document.getElementById('row-' + m.did);
+            if (row) row.style.opacity = '1';
+          }
+        });
+        const btn = document.getElementById('ble-btn');
+        btn.textContent = '✓ CONNECTÉ';
+        btn.classList.add('connected');
+        setStatus('BLE RECONNECTÉ — EN ÉCOUTE');
+        isReconnecting = false;
+      } catch(e) {
+        // Réessayer dans 5s
+        setStatus('Échec reconnexion — nouvel essai dans 5s...');
+        reconnectTimer = setTimeout(() => autoReconnect(), 5000);
+      }
     }
 
     function setStatus(msg) {
       document.getElementById('status').textContent = msg;
     }
+
+    // Reconnexion automatique au réveil de l'écran
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && bleDevice && !bleDevice.gatt.connected && !isReconnecting) {
+        isReconnecting = true;
+        setStatus('Réveil détecté — reconnexion BLE...');
+        reconnectTimer = setTimeout(() => autoReconnect(), 1000);
+      }
+    });
 
     startGeolocation();
   </script>
