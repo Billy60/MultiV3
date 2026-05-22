@@ -170,6 +170,17 @@
     const models = {};
     let modelCount = 0;
 
+    // Wake Lock & reconnexion
+    let wakeLock = null;
+    let reconnectTimer = null;
+    let isReconnecting = false;
+
+    // LOG CSV
+    let logActive = false;
+    let logLines = [];
+    let logStartTime = null;
+    const LOG_HEADER = 'Heure;Indicatif;Latitude;Longitude;Altitude_m;Distance_m;Azimut_deg;Etat;RSSI_dBm';
+
     const map = L.map('map', { center: [48.8566, 2.3522], zoom: 15, zoomControl: false });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap', maxZoom: 19
