@@ -43,7 +43,7 @@
     #panel {
       background: var(--panel); border-top: 1px solid var(--border);
       padding: 5px 12px 8px; flex-shrink: 0; z-index: 1000;
-      max-height: 45vh; overflow-y: auto;
+      max-height: 35vh; overflow-y: auto;
     }
 
     /* Ligne Home pilote */
@@ -143,8 +143,8 @@
   </div>
 
   <div id="log-bar">
-    <button id="log-btn" onclick="toggleLog()">⏺ LOG</button>
-    <button id="dl-btn" onclick="downloadLog()">⬇ TÉLÉCHARGER</button>
+    <button id="log-btn">⏺ LOG</button>
+    <button id="dl-btn">⬇ TÉLÉCHARGER</button>
     <span id="log-info">Log inactif</span>
   </div>
 
@@ -553,6 +553,36 @@
       document.getElementById('status').textContent = msg;
     }
 
+    // Nettoyage automatique des modèles inactifs (toutes les 30s)
+    const MODEL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    setInterval(() => {
+      const now = Date.now();
+      Object.keys(models).forEach(did => {
+        const m = models[did];
+        if (m.lastSeen > 0 && (now - m.lastSeen) > MODEL_TIMEOUT_MS) {
+          // Supprimer le marqueur et la trace de la carte
+          if (m.marker)   { map.removeLayer(m.marker);   }
+          if (m.polyline) { map.removeLayer(m.polyline); }
+          if (m.linkLine) { map.removeLayer(m.linkLine); }
+          // Supprimer la ligne du panel
+          if (m.rowEl) { m.rowEl.remove(); }
+          // Supprimer du registre
+          delete models[did];
+          setStatus(`Modèle ${did} retiré (inactif > 2 min)`);
+        }
+      });
+      // Remettre le message "En attente" si plus aucun modèle
+      if (Object.keys(models).length === 0) {
+        const list = document.getElementById('models-list');
+        if (!document.getElementById('no-model')) {
+          const div = document.createElement('div');
+          div.id = 'no-model';
+          div.textContent = 'En attente de signal...';
+          list.appendChild(div);
+        }
+      }
+    }, 30000);
+
     // Reconnexion automatique au réveil de l'écran
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && bleDevice && !bleDevice.gatt.connected && !isReconnecting) {
@@ -560,6 +590,18 @@
         setStatus('Réveil détecté — reconnexion BLE...');
         reconnectTimer = setTimeout(() => autoReconnect(), 1000);
       }
+    });
+
+    // Event listeners boutons log — plus fiables que onclick sur mobile
+    document.getElementById('log-btn').addEventListener('click', toggleLog);
+    document.getElementById('log-btn').addEventListener('touchend', function(e) {
+      e.preventDefault();
+      toggleLog();
+    });
+    document.getElementById('dl-btn').addEventListener('click', downloadLog);
+    document.getElementById('dl-btn').addEventListener('touchend', function(e) {
+      e.preventDefault();
+      downloadLog();
     });
 
     startGeolocation();
