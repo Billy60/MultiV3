@@ -109,7 +109,7 @@
     .leaflet-tile { filter: brightness(0.85) saturate(0.7) hue-rotate(180deg) invert(1); }
     .leaflet-container { background: #0a0e1a; }
     #center-btn {
-      position: absolute; bottom: 200px; right: 16px; z-index: 999;
+      position: absolute; bottom: 140px; right: 16px; z-index: 999;
       background: var(--panel); border: 1.5px solid var(--border);
       color: var(--accent); width: 40px; height: 40px;
       border-radius: 8px; font-size: 1.1rem; cursor: pointer;
@@ -286,40 +286,63 @@
       rssiEl.textContent = `${parseFloat(m.rssi).toFixed(0)}dBm`;
     }
 
-    function handleData(json) {
-      try {
-        const d = JSON.parse(json);
+    // Buffer BLE — les trames BLE peuvent arriver en plusieurs fragments
+    let bleBuffer = '';
 
-        // Trame ID DGAC
-        if (d.id !== undefined) {
-          setStatus('ID DGAC reçu : ' + d.id);
-          return;
+    function handleData(raw) {
+      // Accumuler les fragments jusqu'à avoir un JSON complet
+      bleBuffer += raw;
+
+      // Extraire tous les JSON complets du buffer (entre { et })
+      let start = bleBuffer.indexOf('{');
+      while (start !== -1) {
+        let depth = 0, end = -1;
+        for (let i = start; i < bleBuffer.length; i++) {
+          if (bleBuffer[i] === '{') depth++;
+          else if (bleBuffer[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end === -1) break; // JSON incomplet — attendre la suite
+
+        const jsonStr = bleBuffer.slice(start, end + 1);
+        bleBuffer = bleBuffer.slice(end + 1); // Consommer
+
+        try {
+          const d = JSON.parse(jsonStr);
+
+          // Trame ID DGAC
+          if (d.id !== undefined) {
+            setStatus('ID DGAC reçu : ' + d.id);
+          } else {
+            const did = d.did || 'G001';
+            const m = getOrCreateModel(did);
+
+            m.lat   = parseFloat(d.lat  || 0);
+            m.lon   = parseFloat(d.lon  || 0);
+            m.dist  = parseFloat(d.dist || 0);
+            m.alt   = parseFloat(d.alt  || 0);
+            m.etat  = (d.etat || '--');
+            m.rssi  = parseFloat(d.rssi || 0);
+            m.moved = d.moved !== false;
+            m.abaro = parseFloat(d.abaro || 0);
+            m.vbat  = parseFloat(d.vbat  || 0);
+            m.rxCount++;
+            m.lastSeen = Date.now();
+
+            updateModelMap(did, m);
+            updateModelPanel(did, m);
+            logTrame(did, m);
+
+            setStatus(`${did} — trame #${m.rxCount} — ${m.etat}`);
+          }
+        } catch(e) {
+          // JSON malformé — ignorer silencieusement
         }
 
-        const did = d.did || 'G001';
-        const m = getOrCreateModel(did);
-
-        m.lat   = parseFloat(d.lat  || 0);
-        m.lon   = parseFloat(d.lon  || 0);
-        m.dist  = parseFloat(d.dist || 0);
-        m.alt   = parseFloat(d.alt  || 0);
-        m.etat  = (d.etat || '--');
-        m.rssi  = parseFloat(d.rssi || 0);
-        m.moved = d.moved !== false;
-        m.abaro = parseFloat(d.abaro || 0);
-        m.vbat  = parseFloat(d.vbat  || 0);
-        m.rxCount++;
-        m.lastSeen = Date.now();
-
-        updateModelMap(did, m);
-        updateModelPanel(did, m);
-        logTrame(did, m);
-
-        setStatus(`${did} — trame #${m.rxCount} — ${m.etat}`);
-
-      } catch(e) {
-        setStatus('ERREUR PARSING JSON');
+        start = bleBuffer.indexOf('{');
       }
+
+      // Nettoyer le buffer si trop long sans JSON valide
+      if (bleBuffer.length > 512) bleBuffer = '';
     }
 
     function centerAll() {
@@ -431,7 +454,7 @@
         logStartTime = new Date();
         btn.textContent = '⏹ STOP LOG';
         btn.classList.add('active');
-        dlBtn.style.display = 'inline-block';
+        dlBtn.classList.add('ready');
         info.textContent = '0 trames';
         setStatus('Log démarré');
       } else {
